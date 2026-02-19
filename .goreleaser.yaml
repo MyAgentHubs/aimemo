@@ -1,0 +1,46 @@
+version: 2
+
+builds:
+  - id: aimemo
+    main: ./cmd/aimemo
+    binary: aimemo
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "aimemo_{{.Version}}_{{.Os}}_{{.Arch}}"
+
+brews:
+  - name: aimemo
+    repository:
+      owner: "{{ .Env.GITHUB_OWNER }}"
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/{{ .Env.GITHUB_OWNER }}/aimemo"
+    description: "Zero-dependency MCP memory server for AI agents"
+    license: MIT
+    test: |
+      system "#{bin}/aimemo --version"
+    install: |
+      bin.install "aimemo"
+      generate_completions_from_executable(bin/"aimemo", "completion")
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude: ["^docs:", "^test:", "Merge pull request"]
