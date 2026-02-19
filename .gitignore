@@ -1,0 +1,13 @@
+# Build output
+/aimemo
+dist/
+
+# Local test db
+.aimemo/
+
+# macOS
+.DS_Store
+
+# Go
+*.test
+*.out
