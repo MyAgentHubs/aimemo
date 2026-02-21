@@ -44,6 +44,10 @@ $ claude "继续搞支付服务"
 
 ```bash
 # 1. 安装
+# Linux/macOS（一行安装）：
+curl -sSL https://raw.githubusercontent.com/MyAgentHubs/aimemo/main/install.sh | bash
+
+# 或者 macOS 通过 Homebrew：
 brew install MyAgentHubs/tap/aimemo
 
 # 2. 在项目根目录初始化记忆
@@ -54,6 +58,10 @@ claude mcp add-json aimemo-memory '{"command":"aimemo","args":["serve"]}'
 ```
 
 重启 Claude Code，下次打开会话时 Claude 会自动加载项目上下文。
+
+### OpenClaw 快速开始
+
+如果你在使用 OpenClaw skills，请查看下面的 [OpenClaw 集成](#-openclaw-集成)章节，了解如何实现 per-skill 记忆隔离。
 
 ## 🔧 工作原理
 
@@ -153,6 +161,138 @@ claude mcp add-json aimemo-memory '{"command":"aimemo","args":["serve"]}'
   还有什么在进行中、有哪些卡点。
 - 用 `memory_link` 关联相关记录（例如 bug 和修复，决策和理由）。
 - 不要存储密钥、凭证或个人信息。
+```
+
+## 🦞 OpenClaw 集成
+
+aimemo 用**零基础设施**和 **per-skill 记忆隔离**解决了 OpenClaw "记住所有但理解无"的问题。
+
+### 为什么在 OpenClaw 中使用 aimemo？
+
+**问题：**
+- OpenClaw 原生的 Markdown 记忆系统越用越差
+- Skills 共享记忆，导致交叉污染
+- 上下文压缩会丢失重要信息
+
+**解决方案：**
+- ✅ **零依赖** — 单个 Go 二进制文件，无需 Docker/Node.js/数据库
+- ✅ **Per-skill 隔离** — 每个 skill 有独立的记忆数据库
+- ✅ **真正有效** — BM25 搜索 + 重要性评分找到关键信息
+- ✅ **本地优先** — 所有数据留在你的机器上
+
+**vs 其他方案：**
+
+| | aimemo | Cognee | memsearch | Supermemory |
+|---|--------|---------|-----------|-------------|
+| **依赖** | 零 | Neo4j/Kuzu | Milvus | 云服务 |
+| **安装** | 30秒 | 复杂 | 复杂 | 需注册 |
+| **Skill 隔离** | 内置 | 手动 | 手动 | N/A |
+| **Linux 支持** | ✅ 原生 | ✅ | ✅ | N/A |
+
+### 5分钟设置
+
+```bash
+# 1. 安装（Linux amd64/arm64）
+curl -sSL https://raw.githubusercontent.com/MyAgentHubs/aimemo/main/install.sh | bash
+
+# 2. 在 OpenClaw 注册 MCP 服务器
+claude mcp add-json aimemo-memory '{"command":"aimemo","args":["serve"]}'
+
+# 或添加到 ~/.openclaw/openclaw.json：
+# {
+#   "mcpServers": {
+#     "aimemo-memory": {
+#       "command": "/usr/local/bin/aimemo",
+#       "args": ["serve"]
+#     }
+#   }
+# }
+
+# 3. 初始化 workspace 记忆
+cd ~/.openclaw/workspace
+aimemo init
+
+# 4. 重启 OpenClaw Gateway
+# Linux: systemctl --user restart openclaw-gateway
+# macOS: launchctl stop com.openclaw.gateway && launchctl start com.openclaw.gateway
+```
+
+### Per-Skill 记忆隔离
+
+每个 skill 通过使用 `context` 参数获得独立的记忆：
+
+**在你的 SKILL.md 中：**
+```markdown
+---
+name: my-skill
+description: 一个有持久记忆的 skill
+---
+
+# My Skill
+
+## 指令
+
+执行工作时：
+
+1. **首先加载记忆**：
+   ```
+   memory_context({context: "my-skill"})
+   ```
+
+2. 使用加载的上下文执行任务
+
+3. **存储学到的东西**：
+   ```
+   memory_store({
+     context: "my-skill",
+     entities: [{
+       name: "preferences",
+       entityType: "config",
+       observations: ["用户偏好 snake_case"]
+     }]
+   })
+   ```
+
+**关键**：始终传递 `context: "my-skill"` 以防止记忆污染。
+```
+
+**结果：**
+```
+~/.openclaw/workspace/.aimemo/
+├── memory.db                    # 共享/默认（无 context）
+├── memory-skill-a.db            # Skill A 的隔离记忆
+├── memory-skill-b.db            # Skill B 的隔离记忆
+└── memory-skill-c.db            # Skill C 的隔离记忆
+```
+
+### 完整示例
+
+查看 [`examples/openclaw-github-pr-reviewer/`](examples/openclaw-github-pr-reviewer/) 获取一个完整的工作 skill：
+- 审查 GitHub PR
+- 学习代码风格偏好
+- 跨会话记住模式
+- 存储反馈以改进
+
+### 文档
+
+- **[OpenClaw 集成指南](docs/openclaw-integration.md)** — 分步设置
+- **[OpenClaw 工作流程](docs/openclaw-workflow.md)** — 架构深入解析
+- **[示例 Skill](examples/openclaw-github-pr-reviewer/)** — 完整实现
+
+### 调试
+
+```bash
+# 列出 skill 的记忆
+aimemo list --context my-skill
+
+# 在 skill 内搜索
+aimemo search "关键词" --context my-skill
+
+# 导出检查
+aimemo export --context my-skill --format json > memory.json
+
+# 获取数据库统计
+aimemo stats --context my-skill
 ```
 
 ## 🖥 客户端支持

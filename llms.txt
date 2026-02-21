@@ -1,0 +1,396 @@
+# aimemo
+
+Zero-dependency MCP memory server for AI agents. Persistent, searchable, local-first, single Go binary.
+
+> https://github.com/MyAgentHubs/aimemo
+
+## Overview
+
+aimemo provides persistent memory for AI coding assistants through the Model Context Protocol (MCP). It runs as a stdio server, stores data in local SQLite databases with FTS5 full-text search, and supports BM25-ranked retrieval with importance scoring (recency + access frequency).
+
+**Key features:**
+- Single binary (Go), zero runtime dependencies
+- Per-project memory (`.aimemo/` directory)
+- Per-context isolation (`memory-{context}.db` files)
+- Concurrent-safe (SQLite WAL mode)
+- CLI tools for human inspection
+- Works offline, data stays local
+
+**Perfect for:**
+- OpenClaw skills needing isolated memory
+- Claude Code project-level memory
+- Any MCP-compatible AI coding client
+
+## Installation
+
+**Linux/macOS:**
+```bash
+curl -sSL https://raw.githubusercontent.com/MyAgentHubs/aimemo/main/install.sh | bash
+```
+
+**macOS Homebrew:**
+```bash
+brew install MyAgentHubs/tap/aimemo
+```
+
+**Verify:**
+```bash
+aimemo --version
+```
+
+> https://github.com/MyAgentHubs/aimemo#quick-start
+
+## MCP Tools
+
+aimemo provides 5 MCP tools:
+
+**memory_context** - Load relevant memory at session start
+- Parameters: `since` (time window), `limit` (max results), `context` (isolation)
+- Returns: Recent + important observations, journal entries, DB path
+- When: ALWAYS call first before any coding task
+
+**memory_store** - Store facts, decisions, progress
+- Parameters: `entities` (array of observations) OR `journal` (session log), `context`, `tags`
+- Supports: Entity types, observations, tags, deduplication
+- When: After completing tasks, making decisions, or at session end
+
+**memory_search** - Full-text search with BM25 ranking
+- Parameters: `query`, `name`, `journal`, `since`, `context`, `type`, `tags`, `limit`, `sort`
+- Returns: Ranked search results with snippets
+- When: Need to recall specific information
+
+**memory_forget** - Soft-delete observations
+- Parameters: `name`, `context`
+- Returns: Confirmation
+- When: Information becomes outdated
+
+**memory_link** - Create relationships between entities
+- Parameters: `from`, `to`, `relation`, `context`
+- Returns: Link confirmation
+- When: Connect related knowledge
+
+> https://github.com/MyAgentHubs/aimemo#mcp-tools
+
+## CLI Commands
+
+**Setup:**
+- `aimemo init` - Create `.aimemo/` directory and database
+- `aimemo serve` - Start MCP stdio server (called by client)
+- `aimemo doctor` - Verify installation and configuration
+
+**Memory operations:**
+- `aimemo add <name> <type> <observations...>` - Add entity
+- `aimemo observe <entity> <observation>` - Add observation
+- `aimemo retract <entity> <observation>` - Remove observation
+- `aimemo forget <entity>` - Delete entity
+- `aimemo search <query>` - Search memory
+- `aimemo get <entity>` - Show entity details
+- `aimemo link <from> <relation> <to>` - Create relationship
+
+**Journal:**
+- `aimemo journal` - Open interactive editor
+- `aimemo journal <text>` - Quick journal entry
+
+**Inspection:**
+- `aimemo list` - List recent observations
+- `aimemo tags` - List all tags
+- `aimemo stats` - Database statistics
+- `aimemo export --format md|json` - Export data
+- `aimemo import <file>` - Import data
+
+**All commands support:** `--context <name>` for isolation
+
+> https://github.com/MyAgentHubs/aimemo#cli-reference
+
+## OpenClaw Integration
+
+aimemo solves OpenClaw's "remembers everything but understands none" problem.
+
+**Setup (5 minutes):**
+1. Install aimemo: `curl -sSL https://raw.githubusercontent.com/MyAgentHubs/aimemo/main/install.sh | bash`
+2. Register MCP: `claude mcp add-json aimemo-memory '{"command":"aimemo","args":["serve"]}'`
+3. Initialize: `cd ~/.openclaw/workspace && aimemo init`
+4. Restart OpenClaw Gateway
+
+**Per-skill memory isolation:**
+```markdown
+In SKILL.md instructions:
+
+ALWAYS call memory tools with context parameter:
+memory_context({context: "my-skill-name"})
+memory_store({context: "my-skill-name", entities: [...]})
+memory_search({context: "my-skill-name", query: "..."})
+```
+
+**Result:**
+- Each skill gets isolated database: `memory-{skill-name}.db`
+- No cross-skill contamination
+- Skills can't see each other's data
+- Optional shared memory via default context
+
+**vs Other Solutions:**
+- Cognee: Requires Neo4j/Kuzu (heavy)
+- memsearch: Requires Milvus vector DB (complex)
+- Supermemory: Cloud service (privacy concerns)
+- aimemo: Zero dependencies, local-first, lightweight
+
+> https://github.com/MyAgentHubs/aimemo/blob/main/docs/openclaw-integration.md
+> https://github.com/MyAgentHubs/aimemo/blob/main/docs/openclaw-workflow.md
+> https://github.com/MyAgentHubs/aimemo/tree/main/examples/openclaw-github-pr-reviewer
+
+## Client Support
+
+aimemo works with any MCP-compatible client. Server command: `aimemo serve`
+
+**Claude Code:**
+```bash
+claude mcp add-json aimemo-memory '{"command":"aimemo","args":["serve"]}'
+```
+
+**Cursor** (`.cursor/mcp.json` or `~/.cursor/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "aimemo-memory": {
+      "command": "aimemo",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+**Windsurf** (`~/.codeium/windsurf/mcp_config.json`):
+```json
+{
+  "mcpServers": {
+    "aimemo-memory": {
+      "command": "aimemo",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+**Cline** (VS Code):
+```json
+{
+  "mcpServers": {
+    "aimemo-memory": {
+      "command": "aimemo",
+      "args": ["serve"],
+      "disabled": false,
+      "alwaysAllow": []
+    }
+  }
+}
+```
+
+**Continue** (`.continue/mcpServers/aimemo-memory.yaml`):
+```yaml
+name: aimemo-memory
+mcpServers:
+  - name: aimemo-memory
+    command: aimemo
+    args: [serve]
+```
+
+**Zed** (`~/.zed/settings.json`):
+```json
+{
+  "context_servers": {
+    "aimemo-memory": {
+      "source": "custom",
+      "command": "aimemo",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+**PATH note (macOS/Homebrew):** GUI apps may not inherit shell PATH. Use absolute path:
+- Homebrew (Apple Silicon): `/opt/homebrew/bin/aimemo`
+- Homebrew (Intel): `/usr/local/bin/aimemo`
+- Linux: `/usr/local/bin/aimemo`
+
+> https://github.com/MyAgentHubs/aimemo#client-support
+
+## Configuration
+
+**Global config:** `~/.aimemo/config.toml` (respects `XDG_CONFIG_HOME`)
+**Project config:** `.aimemo/config.toml` (overrides global)
+
+```toml
+[defaults]
+context = "main"          # Default context name
+max_results = 20          # Observations returned by memory_context
+
+[scoring]
+recency_weight = 0.7      # 0–1, weight of recency vs access frequency
+
+[server]
+timeout_ms = 5000         # Hard timeout on MCP calls
+log_level = "warn"        # "debug" | "info" | "warn" | "error"
+```
+
+> https://github.com/MyAgentHubs/aimemo#configuration
+
+## Memory Isolation with Context
+
+**Problem:** Skills sharing memory causes cross-contamination
+
+**Solution:** Use `context` parameter
+
+```javascript
+// Isolated: Skill A
+memory_store({
+  context: "skill-a",
+  entities: [{name: "preferences", observations: ["..."], entityType: "config"}]
+})
+
+// Isolated: Skill B
+memory_store({
+  context: "skill-b",
+  entities: [{name: "preferences", observations: ["..."], entityType: "config"}]
+})
+
+// Shared: All skills
+memory_store({
+  // No context parameter
+  entities: [{name: "global-settings", observations: ["..."], entityType: "config"}]
+})
+```
+
+**File system:**
+```
+.aimemo/
+├── memory.db              # Default (no context)
+├── memory-skill-a.db      # Isolated for skill-a
+└── memory-skill-b.db      # Isolated for skill-b
+```
+
+**Context naming convention:**
+- Use skill name: `context: "github-pr-reviewer"`
+- Use feature name: `context: "auth-module"`
+- Use project name: `context: "my-api"`
+
+> https://github.com/MyAgentHubs/aimemo/blob/main/docs/openclaw-workflow.md#memory-isolation
+
+## Architecture
+
+```
+AI Coding Client (Claude Code, OpenClaw, Cursor, etc.)
+    ↓ MCP JSON-RPC
+aimemo serve (stdio)
+    ↓
+SQLite + FTS5 (local .aimemo/*.db files)
+```
+
+**Memory lifecycle:**
+1. Client spawns `aimemo serve` on startup
+2. Agent calls `memory_context({context: "..."})`
+3. aimemo opens `memory-{context}.db` (or creates it)
+4. Query: SELECT with importance scoring
+5. Returns: Ranked observations + journal entries
+6. Agent works with loaded context
+7. Agent calls `memory_store({context: "...", ...})`
+8. aimemo persists to SQLite
+9. Process repeats next session
+
+**Importance scoring:**
+```
+score = 0.6 / LOG(hours_since_update + 2)
+      + 0.4 * LOG(access_count + 1)
+```
+
+Recent + frequently accessed = highest importance.
+
+**Performance:**
+- Empty query: < 5ms
+- 10k entities: < 50ms
+- WAL mode: concurrent reads, single writer
+- Hard timeout: 5 seconds per call
+
+> https://github.com/MyAgentHubs/aimemo/blob/main/docs/openclaw-workflow.md#architecture-overview
+
+## Troubleshooting
+
+**MCP server not found:**
+- Check PATH: `which aimemo`
+- Use absolute path in config
+- Verify installation: `aimemo --version`
+
+**Memory not persisting:**
+- Verify `.aimemo/` exists: `ls -la .aimemo/`
+- Check database: `ls -lh .aimemo/*.db`
+- Ensure context parameter matches
+
+**Skills sharing memory:**
+- Add `context: "skill-name"` to all tool calls
+- Check SKILL.md instructions
+
+**Database corruption (rare):**
+```bash
+cd .aimemo
+sqlite3 memory-{context}.db ".recover" | sqlite3 recovered.db
+mv memory-{context}.db memory-backup.db
+mv recovered.db memory-{context}.db
+```
+
+**Performance issues:**
+- Check database size: `du -sh .aimemo/*.db`
+- Export old data: `aimemo export --context {name}`
+- Archive if > 100MB
+
+> https://github.com/MyAgentHubs/aimemo/blob/main/docs/openclaw-workflow.md#troubleshooting
+
+## Resources
+
+**Documentation:**
+- Main README: https://github.com/MyAgentHubs/aimemo/blob/main/README.md
+- OpenClaw Integration: https://github.com/MyAgentHubs/aimemo/blob/main/docs/openclaw-integration.md
+- OpenClaw Workflow: https://github.com/MyAgentHubs/aimemo/blob/main/docs/openclaw-workflow.md
+- Example Skill: https://github.com/MyAgentHubs/aimemo/tree/main/examples/openclaw-github-pr-reviewer
+
+**Community:**
+- GitHub Issues: https://github.com/MyAgentHubs/aimemo/issues
+- GitHub Discussions: https://github.com/MyAgentHubs/aimemo/discussions
+
+**Source Code:**
+- Repository: https://github.com/MyAgentHubs/aimemo
+- License: MIT
+- Language: Go 1.22+
+- Dependencies: Zero runtime dependencies (pure Go SQLite via modernc.org/sqlite)
+
+**Releases:**
+- Latest: https://github.com/MyAgentHubs/aimemo/releases/latest
+- Changelog: https://github.com/MyAgentHubs/aimemo/blob/main/CHANGELOG.md
+
+## Technical Details
+
+**Database:**
+- Engine: SQLite 3.45+ with FTS5
+- Mode: WAL (Write-Ahead Logging)
+- Search: BM25 ranking algorithm
+- Index: Full-text on observations + entity names
+- Concurrent: Multiple readers, single writer
+
+**MCP Protocol:**
+- Version: 2024-11-05
+- Transport: stdio (JSON-RPC 2.0)
+- Timeout: 5 seconds per call
+- Schema tokens: < 2000 total
+
+**Platform Support:**
+- Linux: amd64, arm64
+- macOS: amd64 (Intel), arm64 (Apple Silicon)
+- Windows: amd64 (experimental)
+- Build: CGO_ENABLED=0 (static binary)
+
+**Requirements:**
+- No runtime dependencies
+- No database server
+- No Docker/Node.js/Python
+- No cloud accounts
+- No API keys
+
+> https://github.com/MyAgentHubs/aimemo

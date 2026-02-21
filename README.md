@@ -45,6 +45,10 @@ $ claude "let's keep working on the payment service"
 
 ```bash
 # 1. Install
+# Linux/macOS (one-line install):
+curl -sSL https://raw.githubusercontent.com/MyAgentHubs/aimemo/main/install.sh | bash
+
+# Or macOS via Homebrew:
 brew install MyAgentHubs/tap/aimemo
 
 # 2. Initialize memory for your project (run from project root)
@@ -55,6 +59,10 @@ claude mcp add-json aimemo-memory '{"command":"aimemo","args":["serve"]}'
 ```
 
 Restart Claude Code. On the next session, Claude will automatically load project context.
+
+### Quick Start for OpenClaw
+
+If you're using OpenClaw skills, see the [OpenClaw Integration](#-openclaw-integration) section below for per-skill memory isolation.
 
 ## 🔧 How It Works
 
@@ -155,6 +163,138 @@ This project uses aimemo for persistent memory across sessions.
 - Use `memory_link` to connect related observations (e.g. a bug to its fix,
   a decision to its rationale).
 - Do not store secrets, credentials, or PII.
+```
+
+## 🦞 OpenClaw Integration
+
+aimemo solves OpenClaw's "remembers everything but understands none" problem with **per-skill memory isolation** and **zero infrastructure**.
+
+### Why aimemo for OpenClaw?
+
+**The Problem:**
+- OpenClaw's native Markdown memory gets worse the more you use it
+- Skills share memory, causing cross-contamination
+- Context compression loses important context
+
+**The Solution:**
+- ✅ **Zero dependencies** — Single Go binary, no Docker/Node.js/databases
+- ✅ **Per-skill isolation** — Each skill gets its own memory database
+- ✅ **Actually works** — BM25 search + importance scoring finds what matters
+- ✅ **Local-first** — All data stays on your machine
+
+**vs Other Solutions:**
+
+| | aimemo | Cognee | memsearch | Supermemory |
+|---|--------|---------|-----------|-------------|
+| **Dependencies** | Zero | Neo4j/Kuzu | Milvus | Cloud service |
+| **Installation** | 30 sec | Complex | Complex | Sign up required |
+| **Skill isolation** | Built-in | Manual | Manual | N/A |
+| **Linux support** | ✅ Native | ✅ | ✅ | N/A |
+
+### 5-Minute Setup
+
+```bash
+# 1. Install (Linux amd64/arm64)
+curl -sSL https://raw.githubusercontent.com/MyAgentHubs/aimemo/main/install.sh | bash
+
+# 2. Register MCP server with OpenClaw
+claude mcp add-json aimemo-memory '{"command":"aimemo","args":["serve"]}'
+
+# Or add to ~/.openclaw/openclaw.json:
+# {
+#   "mcpServers": {
+#     "aimemo-memory": {
+#       "command": "/usr/local/bin/aimemo",
+#       "args": ["serve"]
+#     }
+#   }
+# }
+
+# 3. Initialize workspace memory
+cd ~/.openclaw/workspace
+aimemo init
+
+# 4. Restart OpenClaw Gateway
+# Linux: systemctl --user restart openclaw-gateway
+# macOS: launchctl stop com.openclaw.gateway && launchctl start com.openclaw.gateway
+```
+
+### Per-Skill Memory Isolation
+
+Each skill gets its own isolated memory by using the `context` parameter:
+
+**In your SKILL.md:**
+```markdown
+---
+name: my-skill
+description: A skill with persistent memory
+---
+
+# My Skill
+
+## Instructions
+
+When doing work:
+
+1. **Load memory FIRST**:
+   ```
+   memory_context({context: "my-skill"})
+   ```
+
+2. Do your task with loaded context
+
+3. **Store learnings**:
+   ```
+   memory_store({
+     context: "my-skill",
+     entities: [{
+       name: "preferences",
+       entityType: "config",
+       observations: ["User prefers snake_case"]
+     }]
+   })
+   ```
+
+**CRITICAL**: Always pass `context: "my-skill"` to prevent memory pollution.
+```
+
+**Result:**
+```
+~/.openclaw/workspace/.aimemo/
+├── memory.db                    # Shared/default (no context)
+├── memory-skill-a.db            # Skill A's isolated memory
+├── memory-skill-b.db            # Skill B's isolated memory
+└── memory-skill-c.db            # Skill C's isolated memory
+```
+
+### Complete Example
+
+See [`examples/openclaw-github-pr-reviewer/`](examples/openclaw-github-pr-reviewer/) for a full working skill that:
+- Reviews GitHub PRs
+- Learns code style preferences
+- Remembers patterns across sessions
+- Stores feedback for improvement
+
+### Documentation
+
+- **[OpenClaw Integration Guide](docs/openclaw-integration.md)** — Step-by-step setup
+- **[OpenClaw Workflow](docs/openclaw-workflow.md)** — Architecture deep-dive
+- **[Example Skill](examples/openclaw-github-pr-reviewer/)** — Complete implementation
+
+### Debugging
+
+```bash
+# List a skill's memory
+aimemo list --context my-skill
+
+# Search within a skill
+aimemo search "keyword" --context my-skill
+
+# Export for inspection
+aimemo export --context my-skill --format json > memory.json
+
+# Get database stats
+aimemo stats --context my-skill
 ```
 
 ## 🖥 Client Support
