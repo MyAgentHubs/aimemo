@@ -405,3 +405,8 @@ In `~/.zed/settings.json` (global) or `.zed/settings.json` (project-local):
 ## 🤝 Contributing
 
 Bug reports and feature requests go in [GitHub Issues](https://github.com/MyAgentHubs/aimemo/issues). Pull requests are welcome — please open an issue first for anything non-trivial so we can align on direction before you invest time writing code.
+
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/myagenthubs-aimemo).
+
